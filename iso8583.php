@@ -104,7 +104,7 @@ class RoyISO8583{
 	101	=> array('ans', 17, 0),
 	102	=> array('ans', 28, 1),
 	103	=> array('ans', 28, 1),
-	104	=> array('an', 99, 1),
+	104	=> array('an', 100, 1),
 	105	=> array('ans', 999, 1),
 	106	=> array('ans', 999, 1),
 	107	=> array('ans', 999, 1),
