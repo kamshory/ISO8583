@@ -181,7 +181,40 @@ class RoyISO8583{
 	public $segment2 = array(0,0);
 	public $segment3 = array(0,0);
 
-	
+	function getBitmap3()
+	{
+        $tmp	= sprintf("%064d", 0);    
+        $tmp2	= sprintf("%064d", 0);  
+        foreach ($this->values as $key=>$val) 
+		{
+            if($key<65) 
+			{
+                $tmp[$key-1]	= 1;
+            }
+            else 
+			{
+                $tmp[0]	= 1;
+                $tmp2[$key-65]	= 1;
+            }
+        }
+        
+        $result	= "";
+        if ($tmp[0]==1) {
+            while ($tmp2!='') 
+			{
+                $result	.= base_convert(substr($tmp2, 0, 4), 2, 16);
+                $tmp2	= substr($tmp2, 4, strlen($tmp2)-4);
+            }
+        }
+        $main	= "";
+        while ($tmp!='') {
+            $main	.= base_convert(substr($tmp, 0, 4), 2, 16);
+            $tmp	= substr($tmp, 4, strlen($tmp)-4);
+        }
+        $this->_bitmap	= strtoupper($main. $result);
+        
+        return $this->_bitmap;
+	}
 	public function getBitmap()
 	{
 		$maxField = $this->maxField();
@@ -240,8 +273,86 @@ class RoyISO8583{
 			$bitmap = $h1;
 		}
 		return strtoupper($bitmap);	
+		
 	}
 	public $type = "0000";
+	public $valid = array('mti'=>false, 'bitmap'=>false, 'data'=>false);
+	public function parse3($message)
+	{
+		// parse type and bitmap
+		$fields = array();
+		
+		$this->iso = $message;
+		
+		$this->valid['bitmap']	= false;
+        $inp	= substr($this->iso, 4, 32);
+        if (strlen($inp)>=16) 
+		{
+            $primary	= '';
+            $secondary	= '';
+            for ($i=0; $i<16; $i++) 
+			{
+                $primary .= sprintf("%04d", base_convert($inp[$i], 16, 2));
+            }
+            if ($primary[0]==1 && strlen($inp)>=32) 
+			{
+                for ($i=16; $i<32; $i++)
+				{
+                    $secondary .= sprintf("%04d", base_convert($inp[$i], 16, 2));
+                }
+                $this->valid['bitmap'] = true;
+            }
+            if ($secondary=='')
+			{
+				$this->valid['bitmap'] = true;
+			}
+        }
+        //save to data element with ? character
+        $tmp	= $primary. $secondary;
+        for ($i=0; $i<strlen($tmp); $i++) 
+		{
+            if ($tmp[$i]==1) 
+			{
+                $this->values[$i+1]	= '?';
+				$this->fields[] = $i+1;
+            }
+        }
+        $this->bitmap	= $tmp;
+
+        $bitmapLength = strlen($this->bitmap);
+		
+		// parse body
+		$message = substr($message, $bitmapLength+4);
+		foreach($this->fields as $field)
+		{
+			$element = $this->general_config[$field];
+			if($element[2] == 1)
+			{
+				// dynamic length
+				$fl = $element[1];
+				$shift = strlen(sprintf("%d", $fl));
+				$field_length = substr($message, 0, $shift)*1;
+				$message = substr($message, $shift);
+				if(strlen($message) >= $field_length)
+				{
+					$data = substr($message, 0, $field_length);
+					$message = substr($message, $field_length);
+				}
+				else
+				{
+					$data = $message;
+				}
+			}
+			else
+			{
+				// fix length
+				$field_length = $element[1];
+				$data = substr($message, 0, $field_length);
+				$message = substr($message, $field_length);
+			}
+			$this->addValue($field, $data);
+		}
+	}
 	public function parse($message)
 	{
 		// parse type and bitmap
@@ -401,16 +512,20 @@ class RoyISO8583{
 	}
 	public function maxField()
 	{
-		return max($this->fields);
+		if(count($this->fields))
+		{
+			return max($this->fields);
+		}
+		else
+		{
+			return 0;
+		}
 	}
 	public function getField()
 	{
 		$header = "";
 		$header .= $this->type;
 		$maxField = $this->maxField();
-		print_r($this->segment1);
-		print_r($this->segment2);
-		print_r($this->segment1);
 		$seg1 = sprintf("%08x%08x", $this->segment1[0], $this->segment1[1]);
 		$header .= $seg1;
 		if($maxField > 64)
@@ -492,7 +607,7 @@ class RoyISO8583{
 	}
 	public function getISO()
 	{
-		return $this->type.$this->getBitmap().$this->getBody();
+		return $this->getType().$this->getBitmap().$this->getBody();
 	}
 	public function setISO($iso)
 	{
@@ -504,7 +619,7 @@ class RoyISO8583{
 	}
 	public function getType()
 	{
-		return $this->type;
+		return sprintf("%04d", $this->type);
 	}
 }
 ?>
